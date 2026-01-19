@@ -48,3 +48,28 @@ export interface WhatsappInboundMessage {
   body: string | null;
   profileName: string | null;
 }
+
+// Parse patient ID from QR code message body
+// Pattern: "Pflegedokumentation für [Name] (ID: [PatientID])"
+const QR_MESSAGE_PATTERN = /\(ID:\s*([^)]+)\)/i;
+
+export function extractPatientIdFromBody(body: string | null): string | null {
+  if (!body) return null;
+  const match = body.match(QR_MESSAGE_PATTERN);
+  return match ? match[1].trim() : null;
+}
+
+// Look up agency_id from patients table by patient_id
+export async function lookupAgencyByPatientId(patientId: string): Promise<string | null> {
+  const pool = getPool();
+  try {
+    const result = await pool.query(
+      `SELECT agency_id FROM patients WHERE patient_id = $1 LIMIT 1`,
+      [patientId]
+    );
+    return result.rows[0]?.agency_id || null;
+  } catch (err) {
+    console.error("Failed to lookup agency by patient ID:", err);
+    return null;
+  }
+}

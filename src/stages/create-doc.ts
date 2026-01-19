@@ -1,4 +1,4 @@
-import { getPool, WhatsappInboundMessage } from "../db";
+import { getPool, WhatsappInboundMessage, extractPatientIdFromBody, lookupAgencyByPatientId } from "../db";
 import { CareDocumentationAnalysis } from "../services/openai";
 import { log } from "../utils/logger";
 
@@ -12,8 +12,34 @@ export async function processCreateDoc(
   message: WhatsappInboundMessage,
   analysis: CareDocumentationAnalysis
 ): Promise<CreateDocResult> {
-  const { messageSid, fromNumber, agencyId, profileName } = message;
+  const { messageSid, fromNumber, profileName, body } = message;
   const pool = getPool();
+
+  // Resolve agency_id: parse patient ID from body -> lookup patient -> get agency
+  let resolvedAgencyId: string | null = null;
+  
+  // First try: extract patient ID from message body and lookup agency
+  const patientIdFromBody = extractPatientIdFromBody(body);
+  if (patientIdFromBody) {
+    resolvedAgencyId = await lookupAgencyByPatientId(patientIdFromBody);
+    if (resolvedAgencyId) {
+      log.info("Resolved agency from patient lookup", { messageSid, patientId: patientIdFromBody, agencyId: resolvedAgencyId });
+    }
+  }
+  
+  // Second try: use analysis result patientId if body parsing failed
+  if (!resolvedAgencyId && analysis.patientId) {
+    resolvedAgencyId = await lookupAgencyByPatientId(analysis.patientId);
+    if (resolvedAgencyId) {
+      log.info("Resolved agency from analysis patientId", { messageSid, patientId: analysis.patientId, agencyId: resolvedAgencyId });
+    }
+  }
+  
+  // If still no agency, skip creating doc (can't satisfy FK constraint)
+  if (!resolvedAgencyId) {
+    log.error("Cannot resolve agency_id for message", { messageSid, patientIdFromBody, analysisPatientId: analysis.patientId });
+    return { success: false, pendingDocId: null, error: "Cannot resolve agency_id - patient not found" };
+  }
 
   try {
     const pendingDocId = `pd_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
@@ -57,17 +83,17 @@ export async function processCreateDoc(
       JSON.stringify(analysis.structuredData),
       JSON.stringify(analysis.alerts),
       "pending",
-      agencyId,
+      resolvedAgencyId,
       messageSid,
     ]);
 
     if (result.rows.length === 0) {
-      log.info("Document already exists (idempotent skip)", { messageSid, agencyId });
+      log.info("Document already exists (idempotent skip)", { messageSid, agencyId: resolvedAgencyId });
       const existingQuery = `
         SELECT id FROM pending_care_documentations 
         WHERE agency_id = $1 AND message_sid = $2
       `;
-      const existing = await pool.query(existingQuery, [agencyId, messageSid]);
+      const existing = await pool.query(existingQuery, [resolvedAgencyId, messageSid]);
       return { success: true, pendingDocId: existing.rows[0]?.id || null };
     }
 
