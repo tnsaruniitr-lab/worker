@@ -1,4 +1,4 @@
-import OpenAI from "openai";
+import OpenAI, { toFile } from "openai";
 import { config } from "../config";
 import { log } from "../utils/logger";
 
@@ -14,11 +14,9 @@ export function getOpenAIClient(): OpenAI {
 export async function transcribeAudio(audioBuffer: Buffer, language: string = "en"): Promise<string> {
   const client = getOpenAIClient();
 
-  const audioFile = new File([audioBuffer], "voice_message.ogg", {
-    type: "audio/ogg",
-  });
-
   log.info("Sending audio to OpenAI Whisper", { size: audioBuffer.length, language });
+
+  const audioFile = await toFile(audioBuffer, "voice_message.ogg", { type: "audio/ogg" });
 
   const transcription = await client.audio.transcriptions.create({
     file: audioFile,
