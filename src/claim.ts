@@ -16,9 +16,9 @@ export async function claimMessages(): Promise<WhatsappInboundMessage[]> {
       SELECT message_sid 
       FROM whatsapp_inbound_messages
       WHERE job_status = 'READY'
-        AND (next_run_at IS NULL OR next_run_at <= $1)
+        AND (next_run_at IS NULL OR next_run_at::timestamptz <= $1::timestamptz)
         AND message_type = 'voice'
-      ORDER BY (next_run_at IS NULL) DESC, next_run_at ASC NULLS LAST, created_at ASC
+      ORDER BY (next_run_at IS NULL) DESC, next_run_at ASC NULLS LAST, received_at ASC
       LIMIT $2
       FOR UPDATE SKIP LOCKED
     )

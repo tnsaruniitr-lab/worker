@@ -34,7 +34,7 @@ async function getQueueReadyNow(): Promise<number> {
       SELECT COUNT(*) as count
       FROM whatsapp_inbound_messages
       WHERE job_status = 'READY'
-        AND (next_run_at IS NULL OR next_run_at <= NOW())
+        AND (next_run_at IS NULL OR next_run_at::timestamptz <= NOW())
     `);
     return parseInt(result.rows[0]?.count || "0", 10);
   } catch (err) {

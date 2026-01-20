@@ -6,6 +6,8 @@ import { log, setLogContext } from "./utils/logger";
 import { sleep } from "./utils/backoff";
 import { startHeartbeat, stopHeartbeat, incrementJobsProcessed, getWorkerId, upsertHeartbeat } from "./heartbeat";
 
+const WORKER_VERSION = "1.1.0";
+
 let isShuttingDown = false;
 let inFlightMessages: string[] = [];
 
@@ -52,7 +54,7 @@ async function runWorkerLoop(): Promise<void> {
   const workerId = getWorkerId();
   
   setLogContext({ workerId });
-  log.info("Worker starting", { workerId, pollIntervalMs, batchSize: config.worker.batchSize });
+  log.info(`Worker version ${WORKER_VERSION} starting`, { version: WORKER_VERSION, workerId, pollIntervalMs, batchSize: config.worker.batchSize });
 
   const pool = getPool();
   await pool.query("SELECT 1");
